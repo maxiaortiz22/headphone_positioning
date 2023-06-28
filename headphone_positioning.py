@@ -98,8 +98,8 @@ class AudioStreamer:
         waveform_line2, = waveform_plot.plot(self.plot_data[1], 'r', label=f'Max: {np.max(self.plot_data[1]):.1f}')
         waveform_plot.legend()
         fft_plot = fig.add_subplot(212)
-        fft_line1, = fft_plot.semilogx(self.x_axis_fft, self.fft_data[0], 'b', label=f'Nivel: {np.max(self.fft_data[0]):.1f} dBSPL')
-        fft_line2, = fft_plot.semilogx(self.x_axis_fft, self.fft_data[1], 'r', label=f'Nivel: {np.max(self.fft_data[0]):.1f} dBSPL')
+        fft_line1, = fft_plot.semilogx(self.x_axis_fft, self.fft_data[0], 'b', label=f'Nivel: {self._global_level(self.fft_data[0]):.1f} dBSPL')
+        fft_line2, = fft_plot.semilogx(self.x_axis_fft, self.fft_data[1], 'r', label=f'Nivel: {self._global_level(self.fft_data[1]):.1f} dBSPL')
         fft_plot.set_xticks(self.ftick)
         fft_plot.set_xticklabels(self.labels, rotation=45)
         fft_plot.set_xlim(0, self.sample_rate // 2)
@@ -117,13 +117,23 @@ class AudioStreamer:
             waveform_plot.legend()
             fft_line1.set_ydata(self.fft_data[0])
             fft_line2.set_ydata(self.fft_data[1])
-            fft_line1.set_label(f'Nivel: {np.max(self.fft_data[0]):.1f} dBSPL')
-            fft_line2.set_label(f'Nivel: {np.max(self.fft_data[1]):.1f} dBSPL')
+            fft_line1.set_label(f'Nivel: {self._global_level(self.fft_data[0]):.1f} dBSPL')
+            fft_line2.set_label(f'Nivel: {self._global_level(self.fft_data[1]):.1f} dBSPL')
             fft_plot.legend()
             fig.canvas.draw()
             fig.canvas.flush_events()
 
         root.destroy()
+
+    def _global_level(self, data):
+        #Calculo del nivel global:
+
+        #Convierto los valores en dBSPL a escala lineal
+        valores_lineales = [10**(dB/10) for dB in data]
+        #Calculo el promedio de los valores lineales
+        valor_promedio_lineal = np.mean(valores_lineales)
+        #Vuelvo este valor a dB:
+        return 10 * np.log10(valor_promedio_lineal)
 
     def close(self):
         if self.stream is not None:
