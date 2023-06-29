@@ -129,11 +129,11 @@ class AudioStreamer:
         #Calculo del nivel global:
 
         #Convierto los valores en dBSPL a escala lineal
-        valores_lineales = [10**(dB/10) for dB in data]
+        linear_values = [10**(dB/10) for dB in data]
         #Calculo el promedio de los valores lineales
-        valor_promedio_lineal = np.mean(valores_lineales)
-        #Vuelvo este valor a dB:
-        return 10 * np.log10(valor_promedio_lineal)
+        linear_mean_value = np.mean(linear_values)
+        #Vuelvo a pasar a dB:
+        return 10 * np.log10(linear_mean_value)
 
     def close(self):
         if self.stream is not None:
