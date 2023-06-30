@@ -8,7 +8,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class AudioStreamer:
-    def __init__(self, sample_rate=44100, chunk_size=1024):
+    def __init__(self, sample_rate=44100, chunk_size=2048):
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
         self.eps = sys.float_info.epsilon
@@ -31,6 +31,10 @@ class AudioStreamer:
         self.cal_channels = ['Izquierdo', 'Izquierdo', 'Derecho']
         self.selected_channel = tk.StringVar()
         self.selected_channel.set(self.cal_channels[0])
+        self.signal_type = tk.StringVar()
+        self.signals = ['White noise', 'White noise', 'Square wave']
+        self.signal_type.set(self.signals[0])
+        
 
     def get_audio_devices(self):
         device_info_list = []
@@ -47,6 +51,10 @@ class AudioStreamer:
             self.right_cal = cal
 
     def start_stream(self):
+
+        if self.stop_event.is_set():
+            self.stop_event = threading.Event()
+        
         input_device_index = self.devices.index(self.selected_input_device.get())
         output_device_index = self.devices.index(self.selected_output_device.get())
         self.stream = self.p.open(format=pyaudio.paFloat32,
@@ -58,13 +66,20 @@ class AudioStreamer:
                                   input_device_index=input_device_index,
                                   output_device_index=output_device_index)  # Índice del dispositivo de entrada
 
-        noise_thread = threading.Thread(target=self._generate_white_noise)
+        if self.signal_type.get() == 'White noise':
+            noise_thread = threading.Thread(target=self._generate_white_noise)
+            noise_thread.start()
+        elif self.signal_type.get() == 'Square wave':
+            square_thread = threading.Thread(target=self._generate_square_wave)
+            square_thread.start()
+
         audio_thread = threading.Thread(target=self._read_audio)
         self.plot_thread = threading.Thread(target=self._realtime_plot)
 
-        noise_thread.start()
+        
         audio_thread.start()
         self.plot_thread.start()
+
 
     def stop_stream(self):
         self.stop_event.set()
@@ -72,7 +87,17 @@ class AudioStreamer:
     def _generate_white_noise(self):
         while not self.stop_event.is_set():
             white_noise = np.random.uniform(-1.0, 1.0, (2, self.chunk_size)).astype(np.float32)
-            #self.stream.write(white_noise.tobytes())
+            self.stream.write(white_noise.tobytes())
+    
+    def _generate_square_wave(self):
+        f = 30
+        duty_cycle= 0.5
+        i = 0
+        while not self.stop_event.is_set():
+            t = np.arange(i, i+self.chunk_size/self.sample_rate, 1/self.sample_rate)
+            square_wave = np.where((t * f) % 1 < duty_cycle, 1, -1).astype(np.float32)
+            i += self.chunk_size
+            self.stream.write(square_wave.tobytes())
 
     def _read_audio(self):
         while not self.stop_event.is_set():
@@ -103,7 +128,8 @@ class AudioStreamer:
         fft_plot.set_xticks(self.ftick)
         fft_plot.set_xticklabels(self.labels, rotation=45)
         fft_plot.set_xlim(0, self.sample_rate // 2)
-        fft_plot.set_ylim(-50, 110)
+        fft_plot.set_ylim(-20, 100)
+        fft_plot.set_xlim(2000, 20000)
         fft_plot.legend()
         canvas = FigureCanvasTkAgg(fig, master=root)
         canvas.draw()
@@ -139,7 +165,6 @@ class AudioStreamer:
         if self.stream is not None:
             self.stream.stop_stream()
             self.stream.close()
-        self.p.terminate()
 
 # Funciones para los botones de la interfaz
 def start_stream():
@@ -150,6 +175,12 @@ def stop_stream():
     global audio_streamer
     audio_streamer.stop_stream()
     audio_streamer.close()
+
+def close_window():
+    global audio_streamer
+
+    audio_streamer.p.terminate()
+    root.destroy()
 
 def record_calibration():
     global audio_streamer
@@ -199,7 +230,7 @@ if __name__ == '__main__':
 
     root = tk.Tk()
     root.title("Posicionamiento de auriculares")
-    root.geometry("400x400")
+    root.geometry("400x450")
     root.iconbitmap('logo.ico')
 
     # Crear instancia de AudioStreamer
@@ -231,10 +262,16 @@ if __name__ == '__main__':
     cal.pack(pady=10)
 
     # Botones de inicio y detención del stream
+    signal_optionmenu = ttk.OptionMenu(root, audio_streamer.signal_type, *audio_streamer.signals)
+    signal_optionmenu.pack()
+
     start_button = tk.Button(root, text="Start Stream", command=start_stream)
     start_button.pack(pady=10)
 
     stop_button = tk.Button(root, text="Stop Stream", command=stop_stream)
     stop_button.pack(pady=10)
+
+    close_button = tk.Button(root, text="Close", command=close_window)
+    close_button.pack(pady=10)
 
     root.mainloop()
