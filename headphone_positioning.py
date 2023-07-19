@@ -1,6 +1,7 @@
 import pyaudio
 import numpy as np
 import sys
+from scipy.stats import spearmanr
 import threading
 import tkinter as tk
 from tkinter import ttk
@@ -9,20 +10,22 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class AudioStreamer:
     def __init__(self, sample_rate=44100, chunk_size=2048):
+        # stream parameters:
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
         self.eps = sys.float_info.epsilon
         self.left_cal = 1
         self.right_cal = 1
-        self.pref = 20*10**(-6)
         self.p = pyaudio.PyAudio()
         self.stream = None
         self.stop_event = threading.Event()
+        # calculation and plotting:
+        self.pref = 20*10**(-6)
         self.plot_data = np.zeros((2, chunk_size), dtype=np.float32)
         self.fft_data = np.zeros((2, chunk_size // 2), dtype=np.float32)
         self.x_axis_fft = np.fft.fftfreq(chunk_size, 1 / sample_rate)[:chunk_size // 2]
-        self.ftick = [20, 31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000, 20000]
-        self.labels = ['20', '31.5', '63', '125', '250', '500', '1k', '2k', '4k', '8k', '16k', '20k']
+        self.ftick = [20, 31.5, 63, 125, 250, 500, 1000, 2000, 3000, 4000, 6000, 8000, 16000, 20000]
+        self.labels = ['20', '31.5', '63', '125', '250', '500', '1k', '2k', '3k', '6k', '4k', '8k', '16k', '20k']
         self.devices = self.get_audio_devices()
         self.selected_input_device = tk.StringVar()
         self.selected_input_device.set(self.devices[0])
@@ -87,7 +90,7 @@ class AudioStreamer:
     def _generate_white_noise(self):
         while not self.stop_event.is_set():
             white_noise = np.random.uniform(-1.0, 1.0, (2, self.chunk_size)).astype(np.float32)
-            self.stream.write(white_noise.tobytes())
+            #self.stream.write(white_noise.tobytes())
     
     def _generate_square_wave(self):
         f = 30
@@ -116,13 +119,16 @@ class AudioStreamer:
         root = tk.Tk()
         root.title("Posicionamiento de auriculares")
         root.iconbitmap('logo.ico')
-        fig = Figure(figsize=(10, 6), dpi=100)
+        fig = Figure(figsize=(10, 7), dpi=100)
         waveform_plot = fig.add_subplot(211)
         waveform_plot.set_ylim(-1.0, 1.0)
         waveform_line1, = waveform_plot.plot(self.plot_data[0], 'b', label=f'Max: {np.max(self.plot_data[0]):.1f}')
         waveform_line2, = waveform_plot.plot(self.plot_data[1], 'r', label=f'Max: {np.max(self.plot_data[1]):.1f}')
         waveform_plot.legend()
         fft_plot = fig.add_subplot(212)
+        spearman = spearmanr(self.fft_data[0], self.fft_data[1])
+        area = np.trapz(y=self.fft_data[0]-self.fft_data[1], x=self.x_axis_fft)
+        fft_plot.set_title(f"r: {spearman.correlation:.2f} , p: {spearman.pvalue:.2f} , area: {area:.2f}")
         fft_line1, = fft_plot.semilogx(self.x_axis_fft, self.fft_data[0], 'b', label=f'Nivel: {self._global_level(self.fft_data[0]):.1f} dBSPL')
         fft_line2, = fft_plot.semilogx(self.x_axis_fft, self.fft_data[1], 'r', label=f'Nivel: {self._global_level(self.fft_data[1]):.1f} dBSPL')
         fft_plot.set_xticks(self.ftick)
@@ -141,6 +147,9 @@ class AudioStreamer:
             waveform_line1.set_label(f'Max: {np.max(self.plot_data[0]):.1f}')
             waveform_line2.set_label(f'Max: {np.max(self.plot_data[1]):.1f}')
             waveform_plot.legend()
+            spearman = spearmanr(self.fft_data[0], self.fft_data[1])
+            area = np.trapz(y=self.fft_data[0]-self.fft_data[1], x=self.x_axis_fft)
+            fft_plot.set_title(f"r: {spearman.correlation:.2f} , p: {spearman.pvalue:.2f} , area: {area:.2f}")
             fft_line1.set_ydata(self.fft_data[0])
             fft_line2.set_ydata(self.fft_data[1])
             fft_line1.set_label(f'Nivel: {self._global_level(self.fft_data[0]):.1f} dBSPL')
